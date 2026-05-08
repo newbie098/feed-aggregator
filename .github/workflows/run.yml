@@ -33,7 +33,7 @@ jobs:
           FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
         run: python aggregate.py
 
-- name: Commit state
+      - name: Commit state
         run: |
           git config user.name "feed-bot"
           git config user.email "feed-bot@users.noreply.github.com"
