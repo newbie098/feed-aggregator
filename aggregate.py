@@ -135,7 +135,7 @@ def fetch_worklab(source: dict) -> list[dict]:
 
         asoup = BeautifulSoup(ar.text, "html.parser")
 
-        # Try several common date locations
+        # Try meta tags first
         date_str = None
         for selector, attr in [
             ('meta[property="article:published_time"]', "content"),
@@ -149,14 +149,30 @@ def fetch_worklab(source: dict) -> list[dict]:
                 date_str = el[attr]
                 break
 
+        # Fall back: plain-text date in the body e.g. "April 08, 2026"
+        if not date_str:
+            page_text = asoup.get_text(" ", strip=True)
+            m = re.search(
+                r'\b(January|February|March|April|May|June|July|August|'
+                r'September|October|November|December)\s+\d{1,2},\s+\d{4}\b',
+                page_text,
+            )
+            if m:
+                date_str = m.group(0)
+
         if not date_str:
             print(f"    Skipped (no date found): {url}")
             continue
 
         try:
-            pub_dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-            if pub_dt.tzinfo is None:
-                pub_dt = pub_dt.replace(tzinfo=timezone.utc)
+            if "T" in date_str or "-" in date_str:
+                # ISO format: 2026-04-08T00:00:00Z
+                pub_dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                if pub_dt.tzinfo is None:
+                    pub_dt = pub_dt.replace(tzinfo=timezone.utc)
+            else:
+                # Plain text format: "April 08, 2026"
+                pub_dt = datetime.strptime(date_str, "%B %d, %Y").replace(tzinfo=timezone.utc)
         except ValueError:
             print(f"    Skipped (bad date format '{date_str}'): {url}")
             continue
