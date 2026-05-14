@@ -31,7 +31,7 @@ SOURCES = [
     },
 ]
 
-LOOKBACK_DAYS = 30
+LOOKBACK_DAYS = 90
 SEEN_FILE = "seen.json"
 OUTPUT_FILE = "latest_digest.md"
 USER_AGENT = "Mozilla/5.0 (compatible; feed-aggregator/1.0)"
@@ -320,7 +320,7 @@ def send_email(digest_md: str) -> None:
         json={
             "from": from_email,
             "to": [to_email],
-            "subject": f"Feed Digest — {datetime.now().strftime('%Y-%m-%d')}",
+            "subject": f"Feed Digest (Last {LOOKBACK_DAYS} Days) — {datetime.now().strftime('%Y-%m-%d')}",
             "html": markdown_to_html(digest_md),
         },
         timeout=30,
@@ -335,7 +335,7 @@ def main() -> None:
     seen = load_seen()
     client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
-    all_new = []
+    all_articles = []
     for source in SOURCES:
         print(f"\nFetching {source['name']}...")
         try:
@@ -344,18 +344,19 @@ def main() -> None:
             print(f"  Error fetching {source['name']}: {e}")
             continue
         print(f"  {len(articles)} articles in last {LOOKBACK_DAYS} days")
-        new = [a for a in articles if a["url"] not in seen]
-        print(f"  {len(new)} are new (not previously summarised)")
-        all_new.extend(new)
+        all_articles.extend(articles)
 
-    if not all_new:
-        print("\nNothing new. Exiting without sending email.")
+    if not all_articles:
+        print("\nNo articles found in the lookback window. Exiting without sending email.")
         return
 
-    print(f"\nSummarising {len(all_new)} articles...")
-    digest_parts = [f"# Feed Digest — {datetime.now().strftime('%Y-%m-%d')}\n"]
+    print(f"\nSummarising {len(all_articles)} articles...")
+    digest_parts = [
+        f"# Feed Digest — Last {LOOKBACK_DAYS} Days "
+        f"({datetime.now().strftime('%Y-%m-%d')})\n"
+    ]
 
-    for a in sorted(all_new, key=lambda x: x["date"], reverse=True):
+    for a in sorted(all_articles, key=lambda x: x["date"], reverse=True):
         print(f"  {a['source']}: {a['title']}")
         try:
             summary = summarise(a, client)
@@ -376,7 +377,7 @@ def main() -> None:
 
     send_email(digest)
     save_seen(seen)
-    print(f"\nDone. {len(all_new)} new articles processed.")
+    print(f"\nDone. {len(all_articles)} articles processed.")
 
 
 if __name__ == "__main__":
